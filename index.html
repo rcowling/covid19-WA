@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>COVID-19 Washington Cases</title>
+<meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
+
+<script src="https://api.mapbox.com/mapbox-gl-js/v1.8.1/mapbox-gl.js"></script>
+<link href="https://api.mapbox.com/mapbox-gl-js/v1.8.1/mapbox-gl.css" rel="stylesheet" />
+<script src="https://code.jquery.com/jquery-3.3.1.js" integrity="sha256-2Kok7MbOyxpgUVvAk/HJ2jigOSYS2auK4Pfzbm7uH60="
+crossorigin="anonymous"></script>
+<script src='https://cdnjs.cloudflare.com/ajax/libs/tabletop.js/1.5.1/tabletop.min.js'></script>
+<style>
+    body { margin: 0; padding: 0; }
+    #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+    h1 {
+        font-size: 20px;
+        line-height: 30px;
+      }
+
+      h2 {
+        font-size: 14px;
+        line-height: 20px;
+        margin-bottom: 10px;
+      }
+
+      a {
+        text-decoration: none;
+        color: #2dc4b2;
+      }
+
+      #console {
+        position: absolute;
+        margin: 10px;
+        width: 240px;
+        background-color: white;
+        padding: 10px 20px;
+      }
+
+      .session {
+        margin-bottom: 20px;
+      }     
+
+      .row {
+        height: 12px;
+        width: 100%;
+      }
+
+      .colors {
+        background: linear-gradient(
+          to right,
+          #fee5d9,
+          #fcbba1,
+          #fc9272,
+          #fb6a4a,
+          #de2d26,
+          #a50f15
+          
+        );
+        margin-bottom: 5px;
+      }
+
+      .label {
+        width: 15%;
+        display: inline-block;
+        text-align: center;
+      }    
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="console">
+      <h1>COVID-19 in Washington</h1>
+      <p>
+        Spread of COVID-19 in WA, March 2020. 
+      </p>
+      <div class="session">
+        <h2 class="type">Cases</h2>
+        <div class="row colors"></div>
+        <div class="row labels">
+          <div class="label">0</div>
+          <div class="label">1</div>
+          <div class="label">16</div>
+          <div class="label">100</div>
+          <div class="label">150</div>
+          <div class="label">200+</div>
+        </div>
+      </div>      
+      <div class="session">
+        <h2>Date: <label id="active-day">3/12/2020</label></h2>
+        <input
+          id="slider"
+          class="row"
+          type="range"
+          min="13"
+          max="29"
+          step="1"
+          value="13"
+        />
+      </div>
+      <div class="session" style="padding-bottom: 20px">
+        <h2>Display Variable</h2>
+        <div class="row" id="filters">          
+          <input id="cases" type="radio" name="toggle" value="cases" checked="checked" />
+          <label for="cases">Cases</label>
+          <input id="deaths" type="radio" name="toggle" value="deaths" />
+          <label for="deaths">Deaths</label>
+        </div>
+      </div>
+      <div class="session" style="position: relative;">
+        <div id=unassigned-cases style="position: absolute; bottom:1.5px"></div>
+        <div id=unassigned-deaths style="position: absolute; bottom: 1.5px"></div>
+      </div>
+
+<script>
+
+  // edit these colors ramps to change the break values and colors on the map
+  // you also need to edit the color ramps and values in the HTML and CSS elements
+  var casesColorRamp =  [[0, '#fee5d9'],
+                        [1, '#fcbba1'],
+                        [16, '#fc9272'],
+                        [100, "#fb6a4a"],
+                        [150, "#de2d26"],
+                        [240, "#a50f15"]] 
+
+  var deathsColorRamp = [[0, '#fee5d9'],
+                        [1, '#fcbba1'],
+                        [5, '#fc9272'],
+                        [20, "#fb6a4a"],
+                        [50, "#de2d26"],
+                        [90, "#a50f15"]]                                                         
+                          
+  var SpreadsheetUrl = 'https://docs.google.com/spreadsheets/d/1iUcLISymhWWEtnKEkQnjaKKohE3LUPxLUkYyoL9Bb1c/edit?usp=sharing';
+  //var deathsSpreadsheetUrl = 'https://docs.google.com/spreadsheets/d/19-gjpknFrnUjo2eqSWLDDBMY3Rc2dmrE6z90dJr8wBg/edit?usp=sharing';
+  document.getElementById("unassigned-deaths").style.visibility = "hidden";
+  function init() {
+    Tabletop.init( { key: SpreadsheetUrl,
+                     callback: showInfo,
+                     simpleSheet: true,
+                     parseNumbers: true } )
+  }
+
+  function showInfo(data, tabletop) {
+    //alert('Successfully processed!')
+    var casesSheet = tabletop.sheets('Cases By County').elements;
+    //console.log(sheets.elements);
+    //console.log(data);
+    $.ajax({
+          dataType: 'json',
+          url: 'counties-cases.geojson',
+          type: "GET",    
+          success: function(geodata) {
+            //console.log(geodata);
+            geodata.features.forEach(function(element){
+              casesSheet.find(function(newElement) {                
+                if(element.properties.FIPS == newElement.FIPS) {
+                    var keys = Object.keys(newElement);                   
+                    //console.log(keys);
+                    for (i=0; i < keys.length; i++) {
+                       element.properties[keys[i]]=newElement[keys[i]];                      
+                    }           
+                }                             
+              });
+            });
+                    
+                    var geoKeys = Object.keys(geodata.features[0].properties);                     
+                    var maxVal = geoKeys.length - 12;                   
+                    //document.getElementById('slider').max = maxVal;
+                    //console.log(maxVal);
+                    console.log(geodata);              
+                    document.getElementById('unassigned-cases').innerText = '*' + '46' + ' Cases Unassigned';        
+                    map.addSource('counties-source', { type: 'geojson', data: geodata });
+                    
+                    map.addLayer({
+                        "id": "counties",
+                        "type": "fill",
+                        "source": "counties-source",        
+                       'layout': {
+                            'visibility': 'visible'
+                        },
+                        paint: {
+                            'fill-color': {
+                              property: '3/12/20',
+                              type: 'interval',
+                                stops: casesColorRamp
+                            },
+                            'fill-outline-color': 'black',            
+                            }       
+                        
+                    }, 'settlement-label');
+
+              var index = 14;   
+              var oldVal;   
+              document.getElementById('slider').addEventListener('input', function(e) {              
+              map.off('click', 'counties', popupClick);  
+              map.off('click', 'countiesdeaths', popupClick);
+              // create a list of properties from the geojson data           
+              var keys = Object.keys(geodata.features[0].properties);              
+              var currentProp = keys[index];
+              var newVal = $(this).val();
+              // detect which way the slider is moving and change the array position
+              if(newVal > oldVal) {
+                index = (index+1)%(keys.length);                    
+              }
+              else if(newVal < oldVal) {
+                index = (index-1)%(keys.length);
+              }
+              oldVal = newVal;
+              
+              // if the index becomes less than the date variables, reset it
+              if (index < 13) { index = 13};
+              console.log(index);
+
+              geodata.features.forEach(function(feature) {                 
+                if (feature.properties.COUNTY == 'Unassigned') {
+                    document.getElementById('unassigned-cases').innerText = '*' + feature.properties[keys[index]] + ' Cases Unassigned';
+                } 
+              });
+
+              var current_prop_style = { "property": keys[index],
+                        "type": "interval",
+                              "stops": casesColorRamp          
+                        }; 
+              // update the color ramp as the slider moves                  
+              map.setPaintProperty('counties', 'fill-color', current_prop_style);          
+              // update text in the UI
+              document.getElementById('active-day').innerText = keys[index];
+
+              map.on('click', 'counties', function(e) {
+                    new mapboxgl.Popup({ closeButton: false })
+                    .setLngLat(e.lngLat)
+                    .setHTML('<b>County:</b> ' + e.features[0].properties.COUNTY + '<br><b>Cases:</b> ' + e.features[0].properties[keys[index]])
+                    .addTo(map);
+                });
+            });              
+            }
+        })
+    }
+   
+
+  function initDeaths() {
+    Tabletop.init( { key: SpreadsheetUrl,
+                     callback: showDeathInfo,
+                     simpleSheet: true,
+                     parseNumbers: true } )
+  }
+
+  function showDeathInfo(deathdata, tabletop) {
+    //alert('Successfully processed!')
+    //console.log(deathdata);
+    var deathsSheet = tabletop.sheets('Deaths By County').elements;
+    console.log(deathsSheet);
+    $.ajax({
+          dataType: 'json',
+          url: 'counties-deaths.geojson',
+          type: "GET",    
+          success: function(geodatadeaths) {
+            //console.log(geodatadeaths);
+            geodatadeaths.features.forEach(function(element){
+              deathsSheet.find(function(newElement) {                
+                if(element.properties.FIPS == newElement.FIPS) {
+                    var keys = Object.keys(newElement);
+                    var values = Object.values(newElement);
+                    //console.log(keys);
+                    for (i=0; i < keys.length; i++) {
+                       element.properties[keys[i]]=newElement[keys[i]];                        
+                    }           
+                }                             
+              });
+            });
+                    var geoKeys = Object.keys(geodatadeaths.features[0].properties); 
+                    var maxVal = geoKeys.length - 12;                   
+                    //document.getElementById('slider').max = maxVal;
+                    //console.log(maxVal);
+                    console.log(geodatadeaths);              
+                    document.getElementById('unassigned-deaths').innerText = '*' + '0' + ' Deaths Unassigned';    
+                    map.addSource('counties-deaths', { type: 'geojson', data: geodatadeaths });
+                    
+                    map.addLayer({
+                        "id": "countiesdeaths",
+                        "type": "fill",
+                        "source": "counties-deaths",        
+                       'layout': {
+                            'visibility': 'none'
+                        },
+                        paint: {
+                            'fill-color': {
+                              property: '3/12/20',
+                              type: 'interval',
+                                stops: deathsColorRamp
+                            },
+                            'fill-outline-color': 'black',            
+                            }       
+                        
+                    }, 'settlement-label');
+
+              var index = 14;   
+              var oldVal;   
+              document.getElementById('slider').addEventListener('input', function(e) {
+              //map.off('click', 'counties', popupClick);  
+              // create a list of properties from the geojson data           
+              var keys = Object.keys(geodatadeaths.features[0].properties);              
+              var currentProp = keys[index];
+              var newVal = $(this).val();
+              // detect which way the slider is moving and change the array position
+              if(newVal > oldVal) {
+                index = (index+1)%(keys.length);                    
+              }
+              else if(newVal < oldVal) {
+                index = (index-1)%(keys.length);
+              }
+              oldVal = newVal;
+              
+              // if the index becomes less than the date variables, reset it
+              if (index < 13) { index = 13};
+
+              geodatadeaths.features.forEach(function(feature) {                 
+                if (feature.properties.COUNTY == 'Unassigned') {
+                    console.log(feature.properties[keys[index]]);
+                    document.getElementById('unassigned-deaths').innerText = '*' + feature.properties[keys[index]] + ' Deaths Unassigned';
+                } 
+              });
+              console.log(index);
+
+              var current_prop_style = { "property": keys[index],
+                        "type": "interval",
+                              "stops": deathsColorRamp              
+                        }; 
+              // update the color ramp as the slider moves                  
+              map.setPaintProperty('countiesdeaths', 'fill-color', current_prop_style);          
+              // update text in the UI
+              document.getElementById('active-day').innerText = keys[index];
+
+              map.on('click', 'countiesdeaths', function(e) {
+                    new mapboxgl.Popup({ closeButton: false })
+                    .setLngLat(e.lngLat)
+                    .setHTML('<b>County:</b> ' + e.features[0].properties.COUNTY + '<br><b>Deaths:</b> ' + e.features[0].properties[keys[index]])
+                    .addTo(map);
+                });
+            });              
+            }
+        })
+    }
+
+    window.addEventListener('DOMContentLoaded', init)
+    window.addEventListener('DOMContentLoaded', initDeaths)
+    mapboxgl.accessToken = 'pk.eyJ1IjoicmNvd2xpbmciLCJhIjoiY2lzZ2YwcjZtMDFwdzNvcnQ3bmR3NXFhcCJ9.TI01a_YqNaqKWigFu70x7w';
+    var map = new mapboxgl.Map({
+        container: 'map',
+        style: 'mapbox://styles/mapbox/light-v10',
+        center: [-120.7401, 47.7511],
+        zoom: 6
+    }); 
+
+    function popupClick(e) {    
+        new mapboxgl.Popup({ closeButton: false })
+        .setLngLat(e.lngLat)
+        .setHTML('<b>County:</b> ' + e.features[0].properties.COUNTY + '<br><b>Cases:</b> ' + e.features[0].properties['3/12/20'])
+        .addTo(map);
+    };
+    map.on('click', 'counties', popupClick);
+    // Change the cursor to a pointer when the mouse is over the states layer.
+    map.on('mouseenter', 'counties', function() {
+        map.getCanvas().style.cursor = 'pointer';
+    });
+     
+    // Change it back to a pointer when it leaves.
+    map.on('mouseleave', 'counties', function() {
+        map.getCanvas().style.cursor = '';
+    });
+
+    map.on('click', 'countiesdeaths', popupClick);
+    // Change the cursor to a pointer when the mouse is over the states layer.
+    map.on('mouseenter', 'countiesdeaths', function() {
+        map.getCanvas().style.cursor = 'pointer';
+    });
+     
+    // Change it back to a pointer when it leaves.
+    map.on('mouseleave', 'countiesdeaths', function() {
+        map.getCanvas().style.cursor = '';
+    });
+
+    var filters = document.getElementById('filters');
+    var legendLabels = document.querySelectorAll(".row.labels .label");
+    filters.addEventListener('change', function(e) {    
+        var type = e.target.value;
+        if (type == 'cases') {
+            map.setLayoutProperty('counties', 'visibility', 'visible');
+            map.setLayoutProperty('countiesdeaths', 'visibility', 'none');
+            //document.getElementById('unassigned-cases').innerText = '*67 Cases Unassigned';
+            document.getElementById("unassigned-cases").style.visibility = "visible";
+            document.getElementById("unassigned-deaths").style.visibility = "hidden";  
+            document.getElementsByClassName("type")[0].textContent = "Cases";
+            legendLabels[0].textContent = "0";
+            legendLabels[1].textContent = "1";
+            legendLabels[2].textContent = "16";
+            legendLabels[3].textContent = "100";
+            legendLabels[4].textContent = "150"; 
+            legendLabels[5].textContent = "200+";     
+        } else if (type == 'deaths') {
+            map.setLayoutProperty('countiesdeaths', 'visibility', 'visible');
+            map.setLayoutProperty('counties', 'visibility', 'none');
+            //document.getElementById('unassigned').innerText = "0"
+            document.getElementsByClassName("type")[0].textContent = "Deaths";  
+            //document.getElementById('unassigned-deaths').innerText = '*0 Deaths Unassigned';   
+            document.getElementById("unassigned-cases").style.visibility = "hidden";
+            document.getElementById("unassigned-deaths").style.visibility = "visible";       
+            legendLabels[0].textContent = "0";
+            legendLabels[1].textContent = "1";
+            legendLabels[2].textContent = "5";
+            legendLabels[3].textContent = "20";
+            legendLabels[4].textContent = "50"; 
+            legendLabels[5].textContent = "90+";            
+        } 
+    });      
+
+    
+</script>
+
+</body>
+</html>
